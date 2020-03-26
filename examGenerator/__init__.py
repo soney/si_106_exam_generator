@@ -17,7 +17,7 @@ def exec_then_eval(code):
     exec(compile(block, '<string>', mode='exec'), _globals, _locals)
     return eval(compile(last, '<string>', mode='eval'), _globals, _locals)
 
-def handleNotebook(notebook_path, output_path):
+def generateNotebooks(notebook_path, output_path):
     sourceNotebook = nbformat.read(notebook_path, as_version=4)
     examStructure = getExamStructure(sourceNotebook)
     examInfos = getExamInfos(sourceNotebook)
@@ -33,6 +33,20 @@ def handleNotebook(notebook_path, output_path):
         nbformat.write(cellListToNotebook(cells), os.path.join(exams_dir, filename))
         nbformat.write(cellListToNotebook(tests), os.path.join(tests_dir, filename))
 
+def generateSamples(notebook_path, output_path):
+    sourceNotebook = nbformat.read(notebook_path, as_version=4)
+    examStructure = getExamStructure(sourceNotebook)
+    maxAlternatives = getMaxAlternatives(examStructure)
+    examInfos = getExamInfos(sourceNotebook)
+
+    for examInfo in examInfos:
+        for i in range(maxAlternatives):
+            filename = str(i)+'-'+examInfo['filename']
+            cells,tests = generateNotebook(examStructure, examInfo, shuffle=lambda x:x, choice=lambda L:indexOr(L, i))
+            exams_dir = os.path.join(output_path, 'sample-exams')
+            pathlib.Path(exams_dir).mkdir(parents=True, exist_ok=True)
+            nbformat.write(cellListToNotebook(cells), os.path.join(exams_dir, filename))
+
 def cellListToNotebook(cells):
     notebook = nbformat.v4.new_notebook()
     cellObjects = []
@@ -44,26 +58,44 @@ def cellListToNotebook(cells):
     notebook['cells'] = cellObjects
     return notebook
 
-def generateNotebook(examStructure, providedEnv={}):
+def getMaxAlternatives(examStructure):
+    maxAlternatives = 0
+    for group in examStructure:
+        problems = list(group['problems'].values())
+        for problem in problems:
+            numAlternatives = len(problem['alternatives'])
+            if numAlternatives > maxAlternatives:
+                maxAlternatives = numAlternatives
+    return maxAlternatives
+
+def indexOr(seq, idx, alt=random.choice):
+    return seq[idx] if idx<len(seq) else alt(seq)
+
+def generateNotebook(examStructure, providedEnv={}, shuffle=random.shuffle, choice=random.choice):
     cells = []
     tests = []
     env = {
         'problem': 1,
         'points': 0
     }
+    totalPoints = 0
+    totalProblems = 0
     for key,val in providedEnv.items():
         env[key] = val
 
     for group in examStructure:
         problems = list(group['problems'].values())
-        random.shuffle(problems)
+        shuffle(problems)
 
         for problem in problems:
             directive = problem['directive']
             if directive and directive['type'] == ExamDirectiveType.PROBLEM:
-                env['points'] = directive['points']
+                points = directive['points']
+                env['points'] = points
+                totalPoints += points
+                totalProblems += 1
 
-            selectedAlternative = random.choice(problem['alternatives'])
+            selectedAlternative = choice(problem['alternatives'])
 
             for cell in selectedAlternative['cells']:
                 cellCopy = cell.copy()
@@ -71,11 +103,17 @@ def generateNotebook(examStructure, providedEnv={}):
                     cellCopy['source'] = cellCopy['source'].replace('@'+key+'', str(env[key]))
                 cells.append(cellCopy)
             for test in selectedAlternative['tests']:
-                testCopy = test.copy()
-                tests.append(testCopy)
+                tests.append(test.copy())
 
             if directive['type'] == ExamDirectiveType.PROBLEM:
                 env['problem'] += 1
+
+    env['totalpoints'] = totalPoints
+    env['totalproblems'] = totalProblems
+
+    for cell in cells:
+        for key in ['totalpoints', 'totalproblems']:
+            cell['source'] = cell['source'].replace('@'+key+'', str(env[key]))
 
     return cells, tests
 
