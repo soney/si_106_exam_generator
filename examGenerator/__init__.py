@@ -5,6 +5,7 @@ from .parseExamDirective import splitDirective, ExamDirectiveType
 from pprint import pprint
 import ast
 import pathlib
+import uuid
 
 # https://stackoverflow.com/questions/39379331/python-exec-a-code-block-and-eval-the-last-line
 def exec_then_eval(code):
