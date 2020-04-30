@@ -8,6 +8,7 @@ class ExamDirectiveType(Enum):
     PROBLEM = 'problem'
     TEST = 'test'
     EXAMS = 'exams'
+    SOLUTION = 'solution'
 
 def splitDirective(cellType, source):
     if cellType == 'markdown':
@@ -62,6 +63,10 @@ def parseDirective(fullDirective):
     elif splitDirective[0].lower() == 'exams':
         return {
             'type': ExamDirectiveType.EXAMS
+        }
+    elif splitDirective[0].lower() == 'solution':
+        return {
+            'type': ExamDirectiveType.SOLUTION
         }
     else:
         raise ValueError('Unknown directive "{}"'.format(splitDirective[0]))

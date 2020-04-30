@@ -254,6 +254,8 @@ def getExamStructure(nb):
                 currentAlternative['cells'].append(cell)
 
             currentAlternative['tests'].append(cell)
+        elif directive['type'] == ExamDirectiveType.SOLUTION:
+            continue
         elif directive['type'] == ExamDirectiveType.EXAMS:
             continue
     return notebookGroups
