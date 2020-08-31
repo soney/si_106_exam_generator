@@ -23,29 +23,33 @@ def generateNotebooks(notebook_path, output_path):
     addUUIDs(notebook_path)
     sourceNotebook = nbformat.read(notebook_path, as_version=4)
     examStructure = getExamStructure(sourceNotebook)
-    examInfos = getExamInfos(sourceNotebook)
+    examInfos = getExamInfos(sourceNotebook, notebook_path)
     for examInfo in examInfos:
         filename = examInfo['filename']
-        cells,cellMetadata,tests,testMetadata = generateNotebook(examStructure, sourceNotebook, examInfo)
+        cells,cellMetadata,tests,testMetadata,solutions,solutionsMetadata = generateNotebook(examStructure, sourceNotebook, examInfo)
 
         exams_dir = os.path.join(output_path, 'exams')
         tests_dir = os.path.join(output_path, 'tests')
+        solutions_dir = os.path.join(output_path, 'solutions')
 
         pathlib.Path(exams_dir).mkdir(parents=True, exist_ok=True)
         pathlib.Path(tests_dir).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(solutions_dir).mkdir(parents=True, exist_ok=True)
         nbformat.write(cellListToNotebook(cells, cellMetadata), os.path.join(exams_dir, filename))
         nbformat.write(cellListToNotebook(tests, testMetadata), os.path.join(tests_dir, filename))
+        nbformat.write(cellListToNotebook(solutions, solutionsMetadata), os.path.join(solutions_dir, filename))
+        print('Wrote {}'.format(filename))
 
 def generateSamples(notebook_path, output_path):
     sourceNotebook = nbformat.read(notebook_path, as_version=4)
     examStructure = getExamStructure(sourceNotebook)
     maxAlternatives = getMaxAlternatives(examStructure)
-    examInfos = getExamInfos(sourceNotebook)
+    examInfos = getExamInfos(sourceNotebook, notebook_path)
 
     for examInfo in examInfos:
         for i in range(maxAlternatives):
             filename = str(i)+'-'+examInfo['filename']
-            cells,cellMetadata,tests,testMetadata = generateNotebook(examStructure, sourceNotebook, examInfo, shuffle=lambda x:x, choice=lambda L:indexOr(L, i))
+            cells,cellMetadata,tests,testMetadata,solutions,solutionsMetadata = generateNotebook(examStructure, sourceNotebook, examInfo, shuffle=lambda x:x, choice=lambda L:indexOr(L, i))
             exams_dir = os.path.join(output_path, 'sample-exams')
             pathlib.Path(exams_dir).mkdir(parents=True, exist_ok=True)
             nbformat.write(cellListToNotebook(cells), os.path.join(exams_dir, filename))
@@ -96,6 +100,8 @@ def generateNotebook(examStructure, sourceNotebook, providedEnv={}, shuffle=rand
     cellMetadata = deepcopy(sourceNotebook['metadata'])
     tests = []
     testMetadata = deepcopy(sourceNotebook['metadata'])
+    solutions = []
+    solutionsMetadata = deepcopy(sourceNotebook['metadata'])
     problemIDs = []
     env = {
         'problem': 1,
@@ -128,6 +134,11 @@ def generateNotebook(examStructure, sourceNotebook, providedEnv={}, shuffle=rand
                 cells.append(cellCopy)
             for test in selectedAlternative['tests']:
                 tests.append(copy(test))
+            for solutionCell in selectedAlternative['solutionCells']:
+                solutionCellCopy = copy(solutionCell)
+                for key in env:
+                    solutionCellCopy['source'] = solutionCellCopy['source'].replace('@'+key+'', str(env[key]))
+                solutions.append(solutionCellCopy)
 
             if directive['type'] == ExamDirectiveType.PROBLEM:
                 env['problem'] += 1
@@ -141,9 +152,9 @@ def generateNotebook(examStructure, sourceNotebook, providedEnv={}, shuffle=rand
 
     cellMetadata['exam_gen_problems'] = problemIDs
 
-    return cells, cellMetadata, tests, testMetadata
+    return cells, cellMetadata, tests, testMetadata, solutions, solutionsMetadata
 
-def getExamInfos(nb):
+def getExamInfos(nb, notebook_path):
     for cell in nb.cells:
         cell_type = cell['cell_type']
         source = cell['source']
@@ -164,6 +175,10 @@ def getExamInfos(nb):
                             'filename': str(item)
                         })
                 return resultList
+    if notebook_path:
+        return [{ 'filename': os.path.basename(notebook_path) }]
+    else:
+        return [{ 'filename': 'out.ipynb'}]
 
 def addUUIDs(notebook_path):
     nb = nbformat.read(notebook_path, as_version=4)
@@ -193,6 +208,7 @@ def getExamStructure(nb):
         if directive == False:
             if currentAlternative:
                 currentAlternative['cells'].append(cell)
+                currentAlternative['solutionCells'].append(cell)
             else:
                 notebookGroups.append({
                     'problems': {
@@ -201,6 +217,7 @@ def getExamStructure(nb):
                             'alternatives': [{
                                 'id': cellID,
                                 'cells': [cell],
+                                'solutionCells': [cell],
                                 'tests': []
                             }]
                         }
@@ -210,6 +227,7 @@ def getExamStructure(nb):
             currentAlternative = {
                 'id': cellID,
                 'cells': [cell],
+                'solutionCells': [cell],
                 'tests': []
             }
             currentProblem = {
@@ -225,6 +243,7 @@ def getExamStructure(nb):
                 currentAlternative = {
                     'id': cellID,
                     'cells': [cell],
+                    'solutionCells': [cell],
                     'tests': []
                 }
 
@@ -239,6 +258,7 @@ def getExamStructure(nb):
                 currentAlternative = {
                     'id': cellID,
                     'cells': [cell],
+                    'solutionCells': [cell],
                     'tests': []
                 }
                 currentProblem = {
@@ -254,8 +274,9 @@ def getExamStructure(nb):
                 currentAlternative['cells'].append(cell)
 
             currentAlternative['tests'].append(cell)
+            currentAlternative['solutionCells'].append(cell)
         elif directive['type'] == ExamDirectiveType.SOLUTION:
-            continue
+            currentAlternative['solutionCells'].append(cell)
         elif directive['type'] == ExamDirectiveType.EXAMS:
             continue
     return notebookGroups

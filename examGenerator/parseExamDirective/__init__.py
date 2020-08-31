@@ -1,4 +1,5 @@
 import os
+import uuid
 from enum import Enum
 
 directivePrefix = '..'
@@ -49,9 +50,16 @@ def parseDirective(fullDirective):
     elif splitDirective[0].lower() == 'problem':
         directiveType = ExamDirectiveType.PROBLEM
 
-        [problemGroup, problemID] = splitDirective[1].split('.')
         if len(splitDirective) >= 3:
+            if '.' in splitDirective[1]:
+                [problemGroup, problemID] = splitDirective[1].split('.')
+            else:
+                problemGroup = uuid.uuid1()
+                problemID = splitDirective[1]
             points = int(splitDirective[2])
+        elif len(splitDirective) >= 2:
+            [problemGroup, problemID] = [uuid.uuid1(), uuid.uuid1()]
+            points = int(splitDirective[1])
         else:
             points = False
         return {
