@@ -23,22 +23,38 @@ def generateNotebooks(notebook_path, output_path):
     addUUIDs(notebook_path)
     sourceNotebook = nbformat.read(notebook_path, as_version=4)
     examStructure = getExamStructure(sourceNotebook)
+    groupedProblems = getGroupedProblems(examStructure)
     examInfos = getExamInfos(sourceNotebook, notebook_path)
+
+    print('Grouped problems:')
+    for groupIDs in groupedProblems:
+        print('\n'.join(groupIDs))
+        print('===')
+
     for examInfo in examInfos:
         filename = examInfo['filename']
-        cells,cellMetadata,tests,testMetadata,solutions,solutionsMetadata = generateNotebook(examStructure, sourceNotebook, examInfo)
+        cells,cellMetadata,tests,testMetadata,solutions,solutionsMetadata,env = generateNotebook(examStructure, sourceNotebook, examInfo)
 
         exams_dir = os.path.join(output_path, 'exams')
         tests_dir = os.path.join(output_path, 'tests')
         solutions_dir = os.path.join(output_path, 'solutions')
 
-        pathlib.Path(exams_dir).mkdir(parents=True, exist_ok=True)
-        pathlib.Path(tests_dir).mkdir(parents=True, exist_ok=True)
-        pathlib.Path(solutions_dir).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(os.path.dirname(os.path.join(exams_dir, filename))).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(os.path.dirname(os.path.join(tests_dir, filename))).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(os.path.dirname(os.path.join(solutions_dir, filename))).mkdir(parents=True, exist_ok=True)
         nbformat.write(cellListToNotebook(cells, cellMetadata), os.path.join(exams_dir, filename))
         nbformat.write(cellListToNotebook(tests, testMetadata), os.path.join(tests_dir, filename))
         nbformat.write(cellListToNotebook(solutions, solutionsMetadata), os.path.join(solutions_dir, filename))
-        print('Wrote {}'.format(filename))
+        print(f"Wrote {env['totalpoints']} points, {env['totalproblems']} problems to {filename}")
+
+def getGroupedProblems(examStructure):
+    groupedProblems = []
+    for group in examStructure:
+        problems = list(group['problems'].values())
+        for problem in problems:
+            alternativeIDs = (a['id'] for a in problem['alternatives'])
+            groupedProblems.append(alternativeIDs)
+    return groupedProblems
 
 def generateSamples(notebook_path, output_path):
     sourceNotebook = nbformat.read(notebook_path, as_version=4)
@@ -49,10 +65,10 @@ def generateSamples(notebook_path, output_path):
     for examInfo in examInfos:
         for i in range(maxAlternatives):
             filename = str(i)+'-'+examInfo['filename']
-            cells,cellMetadata,tests,testMetadata,solutions,solutionsMetadata = generateNotebook(examStructure, sourceNotebook, examInfo, shuffle=lambda x:x, choice=lambda L:indexOr(L, i))
-            exams_dir = os.path.join(output_path, 'sample-exams')
-            pathlib.Path(exams_dir).mkdir(parents=True, exist_ok=True)
-            nbformat.write(cellListToNotebook(cells), os.path.join(exams_dir, filename))
+            cells,cellMetadata,tests,testMetadata,solutions,solutionsMetadata,env = generateNotebook(examStructure, sourceNotebook, examInfo, shuffle=lambda x:x, choice=lambda L:indexOr(L, i))
+            full_filename = os.path.join(output_path, 'sample-exams', filename)
+            pathlib.Path(os.path.dirname(full_filename)).mkdir(parents=True, exist_ok=True)
+            nbformat.write(cellListToNotebook(cells), full_filename)
 
 def cellListToNotebook(cells, metadata={}):
     notebook = nbformat.v4.new_notebook()
@@ -151,8 +167,9 @@ def generateNotebook(examStructure, sourceNotebook, providedEnv={}, shuffle=rand
             cell['source'] = cell['source'].replace('@'+key+'', str(env[key]))
 
     cellMetadata['exam_gen_problems'] = problemIDs
+    cellMetadata['env'] = env
 
-    return cells, cellMetadata, tests, testMetadata, solutions, solutionsMetadata
+    return cells, cellMetadata, tests, testMetadata, solutions, solutionsMetadata, env
 
 def getExamInfos(nb, notebook_path):
     for cell in nb.cells:
@@ -181,9 +198,14 @@ def getExamInfos(nb, notebook_path):
         return [{ 'filename': 'out.ipynb'}]
 
 def addUUIDs(notebook_path):
+    existingUUIDs = []
     nb = nbformat.read(notebook_path, as_version=4)
     for cell in nb.cells:
         metadata = cell['metadata']
+        if 'id' in metadata:
+            if metadata['id'] in existingUUIDs:
+                metadata['id'] = str(uuid.uuid4())
+            existingUUIDs.append(metadata['id'])
         if 'id' not in metadata:
             metadata['id'] = str(uuid.uuid4())
     nbformat.write(nb, notebook_path)

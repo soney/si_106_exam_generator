@@ -12,20 +12,24 @@ class ExamDirectiveType(Enum):
     SOLUTION = 'solution'
 
 def splitDirective(cellType, source):
-    if cellType == 'markdown':
-        if source[0:len(directivePrefix)] == directivePrefix:
-            lines = source.splitlines()
-            directive = parseDirective(lines[0].strip())
+    try:
+        if cellType == 'markdown':
+            if source[0:len(directivePrefix)] == directivePrefix:
+                lines = source.splitlines()
+                directive = parseDirective(lines[0].strip())
 
-            newSource = os.linesep.join(lines[1:]).lstrip()
-            return (directive, newSource)
-    elif cellType == 'code':
-        if source[0:len(directivePrefix)+1] == '#'+directivePrefix:
-            lines = source.splitlines()
-            directive = parseDirective(lines[0][1:].strip())
+                newSource = os.linesep.join(lines[1:]).lstrip()
+                return (directive, newSource)
+        elif cellType == 'code':
+            if source[0:len(directivePrefix)+1] == '#'+directivePrefix:
+                lines = source.splitlines()
+                directive = parseDirective(lines[0][1:].strip())
 
-            newSource = os.linesep.join(lines[1:]).lstrip()
-            return (directive, newSource)
+                newSource = os.linesep.join(lines[1:]).lstrip()
+                return (directive, newSource)
+    except Exception as e:
+        print(source)
+        print(e)
 
 
     return (False, source)
